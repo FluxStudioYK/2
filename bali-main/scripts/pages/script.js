@@ -56,8 +56,6 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     await loadRoomDataFromDatabase();
 
-
-    // Cached elements
     const checkInEl = document.getElementById('check-in');
     const checkOutEl = document.getElementById('check-out');
     const roomSelectorEl = document.getElementById('room-selector');
@@ -69,34 +67,28 @@ document.addEventListener('DOMContentLoaded', async function () {
     const heroSection = document.getElementById('hero');
     const btnBookNow = document.getElementById('btn-book-now');
     const btnWriteReview = document.querySelector('.btn-write-review');
-    
-    // Review button - hanya tampilkan untuk user yang login
+
     if (btnWriteReview) {
-        // Cek status login
         const checkLoginStatus = async () => {
             try {
-                // Pastikan supabase sudah dimuat
-                if (typeof supabase === 'undefined') {
+                if (typeof supabase === 'undefined' || !supabase) {
                     console.log('Menunggu Supabase dimuat...');
                     setTimeout(checkLoginStatus, 500);
                     return;
                 }
-                
+
                 const { data: { user } } = await supabase.auth.getUser();
-                
+
                 if (user) {
-                    // User sudah login, tampilkan tombol
                     btnWriteReview.style.display = 'block';
                     btnWriteReview.addEventListener('click', function() {
                         window.location.href = 'review.html';
                     });
                 } else {
-                    // User belum login, sembunyikan tombol atau tampilkan pesan login
                     btnWriteReview.style.display = 'none';
-                    
-                    // Tambahkan pesan login jika diperlukan
+
                     const reviewsSection = document.querySelector('.reviews-section');
-                    if (reviewsSection) {
+                    if (reviewsSection && !document.querySelector('.login-message')) {
                         const loginMessage = document.createElement('div');
                         loginMessage.className = 'login-message';
                         loginMessage.innerHTML = '<p>Silakan <a href="login.html">login</a> untuk memberikan ulasan</p>';
@@ -109,50 +101,24 @@ document.addEventListener('DOMContentLoaded', async function () {
                 console.error('Error checking login status:', error);
             }
         };
-        
-        // Panggil fungsi cek login
+
         checkLoginStatus();
     }
-    
-    // Load reviews on index page
+
     async function loadReviews() {
         try {
-            // Check if we're on the index page with reviews section
             const reviewsSection = document.querySelector('.reviews-section');
             if (!reviewsSection) return;
-            
-            // Ensure Supabase is loaded
-            if (!window.supabase && typeof supabase === 'undefined') {
-                console.log('Supabase belum dimuat, mencoba memuat script...');
-                // Load Supabase if not already loaded
-                const supabaseJsScript = document.createElement('script');
-                supabaseJsScript.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-                document.head.appendChild(supabaseJsScript);
-                
-                const supabaseScript = document.createElement('script');
-                supabaseScript.src = 'supabaseClient.js';
-                document.head.appendChild(supabaseScript);
-                
-                // Load reviewsApi if not already loaded
-                const reviewsApiScript = document.createElement('script');
-                reviewsApiScript.src = 'reviewsApi.js';
-                document.head.appendChild(reviewsApiScript);
-                
-                // Wait for scripts to load
-                setTimeout(loadReviews, 1500);
+
+            if (!window.supabase || typeof supabase === 'undefined') {
+                console.log('Supabase belum dimuat, menunggu...');
+                setTimeout(loadReviews, 1000);
                 return;
             }
-            
-            // Load the supabase client if not already loaded
-            if (typeof supabase === 'undefined' && typeof supabaseClient !== 'undefined') {
-                supabase = supabaseClient;
-            }
-            
+
             console.log('Memuat ulasan...');
-            
-            // Load reviews API if not already loaded
+
             if (typeof reviewsApi === 'undefined') {
-                // Create a simple implementation if the API isn't available
                 window.reviewsApi = {
                     async getReviews() {
                         try {
@@ -160,9 +126,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                                 .from('reviews')
                                 .select('*')
                                 .order('created_at', { ascending: false });
-                                
+
                             if (error) throw error;
-                            return { success: true, data };
+                            return { success: true, data: data || [] };
                         } catch (error) {
                             console.error('Error fetching reviews:', error);
                             return { success: false, error, data: [] };
@@ -175,33 +141,27 @@ document.addEventListener('DOMContentLoaded', async function () {
                     }
                 };
             }
-            
-            // Get reviews from API
+
             const result = await reviewsApi.getReviews();
             if (!result.success) {
                 console.error('Gagal memuat ulasan:', result.error);
                 return;
             }
-            
+
             const reviews = result.data;
-            console.log('Ulasan berhasil dimuat:', reviews);
-            
-            // Update average rating
+            console.log('Ulasan berhasil dimuat:', reviews.length, 'reviews');
+
             const avgRating = reviewsApi.calculateAverageRating(reviews);
             const ratingValueEl = document.querySelector('.rating-value');
             if (ratingValueEl) {
                 ratingValueEl.textContent = avgRating;
             }
-            
-            // Clear existing reviews except the header and button
+
             const reviewItems = Array.from(document.querySelectorAll('.review-item'));
             reviewItems.forEach(item => item.remove());
-            
-            // Get references to where we'll insert reviews
-            const reviewsHeader = document.querySelector('.reviews-header');
+
             const writeReviewBtn = document.querySelector('.btn-write-review');
-            
-            // Add reviews to the page
+
             if (reviews && reviews.length > 0) {
                 reviews.slice(0, 5).forEach(review => {
                     const reviewEl = createReviewElement(review);
@@ -211,24 +171,25 @@ document.addEventListener('DOMContentLoaded', async function () {
                 const noReviewsEl = document.createElement('div');
                 noReviewsEl.className = 'no-reviews';
                 noReviewsEl.textContent = 'Belum ada ulasan. Jadilah yang pertama memberikan ulasan!';
+                noReviewsEl.style.textAlign = 'center';
+                noReviewsEl.style.padding = '20px';
+                noReviewsEl.style.color = '#999';
                 reviewsSection.insertBefore(noReviewsEl, writeReviewBtn);
             }
         } catch (error) {
             console.error('Error loading reviews:', error);
         }
     }
-    
-    // Helper function to create a review element
+
     function createReviewElement(review) {
         const reviewEl = document.createElement('div');
         reviewEl.className = 'review-item';
-        
-        // Format date
+
         const reviewDate = new Date(review.created_at);
         const now = new Date();
         const diffTime = Math.abs(now - reviewDate);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+
         let dateText;
         if (diffDays < 7) {
             dateText = diffDays + ' hari yang lalu';
@@ -237,11 +198,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         } else {
             dateText = Math.floor(diffDays / 30) + ' bulan yang lalu';
         }
-        
-        // Create avatar initial
+
         const initial = review.name ? review.name.charAt(0).toUpperCase() : 'A';
-        
-        // Create stars based on rating
+
         const rating = parseInt(review.rating) || 5;
         let starsHtml = '';
         for (let i = 1; i <= 5; i++) {
@@ -251,7 +210,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 starsHtml += '<i class="far fa-star"></i>';
             }
         }
-        
+
         reviewEl.innerHTML = `
             <div class="review-header">
                 <div class="reviewer-info">
@@ -269,14 +228,12 @@ document.addEventListener('DOMContentLoaded', async function () {
                 ${review.review}
             </div>
         `;
-        
+
         return reviewEl;
     }
-    
-    // Load reviews when page loads
+
     loadReviews();
 
-    // Helpers
     function setMinDateInputs() {
         const today = new Date();
         const isoToday = today.toISOString().split('T')[0];
@@ -294,14 +251,25 @@ document.addEventListener('DOMContentLoaded', async function () {
         roomKey = normalizeRoomKey(roomKey);
         const room = roomData[roomKey];
         if (!room) return;
-        // highlight card
+
+        console.log('Rendering room UI for:', roomKey, room);
+
         roomCards.forEach(c => c.classList.toggle('selected', c.dataset.room === roomKey));
-        // sync hidden select
+
         if (roomSelectorEl) roomSelectorEl.value = roomKey;
-        // update header/price/hero
-        if (roomTypeEl) roomTypeEl.textContent = room.name; // Update room type display
-        if (roomPriceEl) roomPriceEl.textContent = room.price; // Update room price display
-        if (heroSection) heroSection.style.backgroundImage = `url(${room.image})`; // Update hero image
+
+        if (roomTypeEl) {
+            roomTypeEl.textContent = room.name;
+            console.log('Updated room type to:', room.name);
+        }
+        if (roomPriceEl) {
+            roomPriceEl.textContent = room.price;
+            console.log('Updated price to:', room.price);
+        }
+        if (heroSection) {
+            heroSection.style.backgroundImage = `url(${room.image})`;
+            console.log('Updated hero image to:', room.image);
+        }
 
         const selectedRoomEl = document.getElementById('selected-room');
         if (selectedRoomEl) selectedRoomEl.textContent = room.name;
@@ -325,13 +293,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         return new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
-    // calculate months: same-day or <1 month => 1
-    // Jan15 -> Feb14 = 1 ; Jan15 -> Feb16 = 2
     function calculateMonths(checkInDate, checkOutDate) {
         if (!checkInDate || !checkOutDate || checkOutDate < checkInDate) return 0;
         let months = (checkOutDate.getFullYear() - checkInDate.getFullYear()) * 12;
         months += checkOutDate.getMonth() - checkInDate.getMonth();
-        // add 1 month only if checkout day > checkin day
         if (checkOutDate.getDate() > checkInDate.getDate()) months += 1;
         return Math.max(1, months);
     }
@@ -350,6 +315,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         const checkOut = parseDateLocal(checkOutStr);
         const room = roomData[roomKey] || roomData['type1'];
 
+        console.log('Calculating with room:', roomKey, 'Price:', room.priceValue);
+
         if (!checkInStr || !checkOutStr) {
             if (durationEl) durationEl.textContent = '0 Bulan';
             if (totalPriceEl) totalPriceEl.textContent = formatCurrency(0);
@@ -365,6 +332,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         const months = calculateMonths(checkIn, checkOut);
         const totalPrice = room.priceValue * months;
 
+        console.log('Duration:', months, 'months, Total Price:', totalPrice);
+
         if (durationEl) {
             durationEl.textContent = `${months} Bulan`;
             durationEl.style.transform = 'scale(1.03)';
@@ -376,46 +345,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             setTimeout(() => totalPriceEl.style.transform = '', 120);
         }
 
-        if (checkInStr && checkOutStr) {
-            const availability = await checkRoomAvailability(room.name, checkInStr, checkOutStr);
-            updateAvailabilityDisplay(availability);
-        }
-
         return { months, totalPrice };
     }
 
-    function updateAvailabilityDisplay(availability) {
-        let availabilityIndicator = document.getElementById('availability-indicator');
-        if (!availabilityIndicator) {
-            availabilityIndicator = document.createElement('div');
-            availabilityIndicator.id = 'availability-indicator';
-            availabilityIndicator.style.marginTop = '10px';
-            availabilityIndicator.style.padding = '8px';
-            availabilityIndicator.style.borderRadius = '5px';
-            availabilityIndicator.style.textAlign = 'center';
-            availabilityIndicator.style.fontSize = '14px';
-            availabilityIndicator.style.fontWeight = '500';
-
-            const bookingControls = document.querySelector('.booking-controls');
-            if (bookingControls) {
-                bookingControls.appendChild(availabilityIndicator);
-            }
-        }
-
-        if (availability.available) {
-            availabilityIndicator.style.backgroundColor = 'rgba(76, 175, 80, 0.2)';
-            availabilityIndicator.style.color = '#4CAF50';
-            availabilityIndicator.textContent = availability.count > 0
-                ? `Tersedia ${availability.count} kamar untuk tanggal yang dipilih`
-                : 'Kamar tersedia';
-        } else {
-            availabilityIndicator.style.backgroundColor = 'rgba(244, 67, 54, 0.2)';
-            availabilityIndicator.style.color = '#F44336';
-            availabilityIndicator.textContent = 'Tidak tersedia untuk tanggal yang dipilih';
-        }
-    }
-
-    // Event bindings
     roomCards.forEach(card => {
         card.addEventListener('click', () => {
             const key = normalizeRoomKey(card.dataset.room);
@@ -435,18 +367,16 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (checkInEl) checkInEl.addEventListener('change', calculateAndRender);
     if (checkOutEl) checkOutEl.addEventListener('change', calculateAndRender);
 
-    // initial render + calc
     const urlParams = new URLSearchParams(window.location.search);
     const initialRoomRaw = urlParams.get('room') || urlParams.get('room_type') || (roomSelectorEl ? roomSelectorEl.value : 'type1');
     const initialRoom = normalizeRoomKey(initialRoomRaw);
     renderRoomUI(initialRoom);
     setTimeout(calculateAndRender, 80);
 
-    // Book now handler -> redirect to payment.html with params
     if (btnBookNow) {
         btnBookNow.addEventListener('click', async function (e) {
             e.preventDefault();
-            const res = calculateAndRender();
+            const res = await calculateAndRender();
             if (!res) {
                 alert('Periksa pilihan kamar dan tanggal sewa.');
                 return;
@@ -456,16 +386,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const checkInStr = checkInEl ? checkInEl.value : '';
             const checkOutStr = checkOutEl ? checkOutEl.value : '';
 
-            const availability = await checkRoomAvailability(room.name, checkInStr, checkOutStr);
-
-            if (!availability.available) {
-                alert('Maaf, kamar tidak tersedia untuk tanggal yang dipilih. Silakan pilih tanggal lain atau tipe kamar yang berbeda.');
-                return;
-            }
-
-            if (availability.count > 0) {
-                console.log(`Tersedia ${availability.count} kamar untuk booking ini`);
-            }
+            console.log('Processing booking for:', room.name);
 
             const params = new URLSearchParams({
                 room_type: room.name,
